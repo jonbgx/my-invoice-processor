@@ -3,9 +3,11 @@ import requests
 from google import genai
 from google.genai import types
 from pydantic import BaseModel, Field
+import base64
+import json
 
 # Constants
-GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+GEMINI_API_KEY = st.secrets.get("GEMINI_API_KEY", "AQ.Ab8RN6KmF8cewEtMtz86zNbNfyj0rAZBT4MOffx6wqKafd68ow")
 MAKE_WEBHOOK_URL = "https://hook.eu1.make.com/ayqyd31eyeyfo2lecr3q1enhioe3yjif"
 
 # Define the expected JSON structure using Pydantic
@@ -23,7 +25,11 @@ st.set_page_config(
     layout="wide"
 )
 
-# Enterprise Dashboard Styling
+# Initialize active upload method in session state
+if "upload_method" not in st.session_state:
+    st.session_state.upload_method = "file"
+
+# Redesigned minimalist interface styling
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -32,137 +38,217 @@ html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
 }
 
-/* Primary confirm action button */
+/* Soft off-white background */
+.stApp {
+    background-color: #F8F9FA !important;
+}
+
+/* Card layout containers (st.container with border) */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    background-color: #ffffff !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 16px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+    padding: 1.5rem !important;
+    margin-bottom: 1rem !important;
+}
+
+/* Typography styles */
+.brand-title {
+    font-weight: 800;
+    font-size: 1.8rem;
+    color: #0F172A;
+    letter-spacing: -0.5px;
+}
+
+.brand-accent {
+    color: #4F46E5;
+}
+
+/* Primary charcoal action buttons */
 div.stButton > button {
-    background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%) !important;
-    color: white !important;
+    background-color: #0F172A !important;
+    color: #ffffff !important;
     border: none !important;
-    border-radius: 8px !important;
-    padding: 0.7rem 2rem !important;
+    border-radius: 12px !important;
+    padding: 0.8rem 2rem !important;
     font-weight: 600 !important;
     font-size: 1rem !important;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2) !important;
     transition: all 0.2s ease !important;
     width: 100% !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
 }
 
 div.stButton > button:hover {
+    background-color: #1E293B !important;
     transform: translateY(-1px) !important;
-    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.4) !important;
 }
 
-/* Input elements styling */
+/* Choose Method selection buttons */
+div.stButton > button[key*="select_"] {
+    background-color: #ffffff !important;
+    color: #4B5563 !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 14px !important;
+    height: 80px !important;
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all 0.2s ease !important;
+}
+div.stButton > button[key*="select_"]:hover {
+    border-color: #4F46E5 !important;
+    background-color: rgba(79, 70, 229, 0.01) !important;
+}
+
+/* Native inputs and text areas */
 div[data-baseweb="input"] {
-    background-color: rgba(128, 128, 128, 0.03) !important;
-    border: 1px solid rgba(128, 128, 128, 0.15) !important;
-    border-radius: 8px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 12px !important;
+    color: #0F172A !important;
+    padding: 2px 4px !important;
     transition: all 0.2s ease !important;
 }
 div[data-baseweb="input"]:focus-within {
     border-color: #4F46E5 !important;
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1) !important;
 }
 
-/* Text area styling */
 div[data-baseweb="textarea"] {
-    background-color: rgba(128, 128, 128, 0.03) !important;
-    border: 1px solid rgba(128, 128, 128, 0.15) !important;
-    border-radius: 8px !important;
+    background-color: #ffffff !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 12px !important;
+    color: #0F172A !important;
+    padding: 2px 4px !important;
     transition: all 0.2s ease !important;
 }
 div[data-baseweb="textarea"]:focus-within {
     border-color: #4F46E5 !important;
-    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1) !important;
 }
 
-/* Radio button items container */
-div[data-testid="stRadio"] > label {
-    font-weight: 600 !important;
-    margin-bottom: 0.5rem !important;
-}
-div[data-testid="stRadio"] div[role="radiogroup"] {
-    gap: 12px !important;
-}
-div[data-testid="stRadio"] label[data-baseweb="radio"] {
-    background-color: rgba(128, 128, 128, 0.03) !important;
-    border: 1px solid rgba(128, 128, 128, 0.15) !important;
-    padding: 8px 18px !important;
-    border-radius: 8px !important;
-    transition: all 0.2s ease !important;
-}
-div[data-testid="stRadio"] label[data-baseweb="radio"]:hover {
-    border-color: #4F46E5 !important;
-    background-color: rgba(79, 70, 229, 0.04) !important;
-}
-
-/* High contrast View Files and View Spreadsheet link buttons */
+/* Link buttons (Google Drive & Sheets) styled as outline elements */
 div.stLinkButton > a {
-    background-color: rgba(79, 70, 229, 0.06) !important;
-    color: #4F46E5 !important;
-    border: 1px solid rgba(79, 70, 229, 0.3) !important;
-    border-radius: 8px !important;
+    width: 100% !important;
+    background-color: #ffffff !important;
+    color: #4B5563 !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 12px !important;
     font-weight: 600 !important;
-    padding: 0.6rem 1.2rem !important;
-    transition: all 0.2s ease !important;
+    padding: 0.7rem 1.2rem !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
     text-decoration: none !important;
+    transition: all 0.2s ease !important;
 }
 div.stLinkButton > a:hover {
-    background-color: rgba(79, 70, 229, 0.12) !important;
-    border-color: #4F46E5 !important;
-    transform: translateY(-1px) !important;
+    background-color: #F9FAFB !important;
+    border-color: #9CA3AF !important;
+    color: #111827 !important;
 }
 
-/* File uploader styling */
+/* File uploader container */
 div[data-testid="stFileUploader"] {
-    border: 1px dashed rgba(79, 70, 229, 0.25) !important;
-    border-radius: 10px !important;
-    padding: 1.5rem !important;
-    background-color: rgba(79, 70, 229, 0.01) !important;
-    transition: all 0.2s ease !important;
+    border: 2px dashed #E5E7EB !important;
+    border-radius: 14px !important;
+    padding: 2rem !important;
+    background-color: #ffffff !important;
 }
 div[data-testid="stFileUploader"]:hover {
     border-color: #4F46E5 !important;
-    background-color: rgba(79, 70, 229, 0.03) !important;
+}
+
+/* Mobile responsive padding constraints */
+@media (max-width: 768px) {
+    div[data-testid="column"] {
+        margin-bottom: 2rem !important;
+    }
+    .stApp {
+        padding: 12px !important;
+    }
 }
 </style>
 """, unsafe_allow_html=True)
 
-# Sleek Navbar Header
+# Dynamic borders for active input selector (electric indigo highlight #4F46E5)
+if st.session_state.upload_method == "file":
+    active_style = """
+    <style>
+    div.stButton > button[key*="select_file"] {
+        border-color: #4F46E5 !important;
+        background-color: rgba(79, 70, 229, 0.02) !important;
+        box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1) !important;
+    }
+    </style>
+    """
+else:
+    active_style = """
+    <style>
+    div.stButton > button[key*="select_camera"] {
+        border-color: #4F46E5 !important;
+        background-color: rgba(79, 70, 229, 0.02) !important;
+        box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1) !important;
+    }
+    </style>
+    """
+st.markdown(active_style, unsafe_allow_html=True)
+
+# Sleek Header Bar
 st.markdown("""
-<div style="display: flex; justify-content: space-between; align-items: center; padding: 1.2rem 0; border-bottom: 1px solid rgba(128,128,128,0.18); margin-bottom: 1.8rem;">
-    <div style="font-weight: 800; font-size: 1.8rem; letter-spacing: -0.5px; background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">🧾 InvoiceProcessor.ai</div>
-    <div style="font-size: 0.85rem; color: #6B7280; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;">Corporate Hub</div>
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; border-bottom: 1px solid #E5E7EB; margin-bottom: 1.8rem;">
+    <div class="brand-title">🧾 Invoice<span class="brand-accent">Processor</span></div>
+    <div style="font-size: 0.8rem; color: #6B7280; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;">Hub</div>
 </div>
 """, unsafe_allow_html=True)
 
 # Minimalist workflow legend
 st.markdown("""
-<div style="background-color: rgba(128,128,128,0.02); border: 1px solid rgba(128,128,128,0.08); padding: 1rem; border-radius: 10px; margin-bottom: 1.8rem;">
-    <span style="font-weight: 600; font-size: 0.85rem; color: #4B5563; display: block; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.5px;">Processing Workflow</span>
+<div style="background-color: #ffffff; border: 1px solid #E5E7EB; padding: 1rem; border-radius: 14px; margin-bottom: 1.8rem;">
+    <span style="font-weight: 700; font-size: 0.8rem; color: #374151; display: block; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.5px;">Instructions</span>
     <div style="display: flex; gap: 15px; font-size: 0.85rem; color: #6B7280; flex-wrap: wrap;">
-        <div><b>1. Select</b>: Upload file or capture photo</div>
-        <div style="color: #A855F7;">•</div>
-        <div><b>2. Verify</b>: Review details side-by-side with preview</div>
-        <div style="color: #A855F7;">•</div>
-        <div><b>3. Export</b>: Save data to Google Sheet</div>
+        <div><b>1. Select Method</b>: Upload file or snap photo</div>
+        <div style="color: #E5E7EB;">|</div>
+        <div><b>2. Verify Details</b>: Review side-by-side with preview</div>
+        <div style="color: #E5E7EB;">|</div>
+        <div><b>3. Export</b>: Save details directly to Google Sheet</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Choose Input Source
-input_source = st.radio("Choose Input Method:", ["📁 Upload File", "📸 Take Photo"], horizontal=True)
+# Choose Input Source - Circular style choice buttons
+st.markdown("### Choose Input Method")
+with st.container(border=True):
+    col_sel1, col_sel2 = st.columns(2, gap="medium")
+    with col_sel1:
+        if st.button("📁\n\nUpload File", key="select_file", use_container_width=True):
+            st.session_state.upload_method = "file"
+            st.rerun()
+    with col_sel2:
+        if st.button("📸\n\nTake Photo", key="select_camera", use_container_width=True):
+            st.session_state.upload_method = "camera"
+            st.rerun()
 
-if "Upload File" in input_source:
+st.markdown("<br>", unsafe_allow_html=True)
+
+# Render chosen uploader
+if st.session_state.upload_method == "file":
     uploaded_file = st.file_uploader(
-        "Upload an invoice image or PDF document",
+        "Upload an invoice document",
         type=["jpg", "jpeg", "png", "pdf"],
-        help="Supports JPEG, PNG, and PDF files"
+        help="Supports PDF, PNG, and JPEG files"
     )
 else:
-    uploaded_file = st.camera_input("Take a photo of the invoice")
+    uploaded_file = st.file_uploader(
+        "Snap a photo of the invoice",
+        type=["jpg", "jpeg", "png"],
+        help="Tapping 'Browse files' on a mobile phone will automatically prompt your native full-screen camera app."
+    )
 
 if uploaded_file is not None:
     # Build unique ID for current file based on its metadata to prevent API re-calls on UI adjustments
@@ -199,7 +285,6 @@ if uploaded_file is not None:
                     extracted: InvoiceData = response.parsed
                 else:
                     # Fallback JSON parsing
-                    import json
                     parsed_json = json.loads(response.text)
                     extracted = InvoiceData(**parsed_json)
                 
@@ -212,6 +297,9 @@ if uploaded_file is not None:
                 
                 # Update file tracker
                 st.session_state.current_file_id = file_id
+                # Reset success modal state for a new file
+                if "upload_success" in st.session_state:
+                    del st.session_state.upload_success
                 st.success("✅ Extraction completed successfully!")
                 
             except Exception as e:
@@ -231,7 +319,6 @@ if uploaded_file is not None:
         st.markdown("### Document Preview")
         with st.container(border=True):
             if uploaded_file.type == "application/pdf":
-                import base64
                 # Convert PDF bytes to base64 to display the document itself
                 base64_pdf = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
                 pdf_display = f'<iframe src="data:application/pdf;base64,{base64_pdf}" width="100%" height="600" style="border: none; border-radius: 8px;"></iframe>'
@@ -243,48 +330,67 @@ if uploaded_file is not None:
         # Form containing the input fields
         st.markdown("### Edit Extracted Fields")
         with st.container(border=True):
-            # We bind Streamlit text inputs directly to key="company_name", etc.
-            company_name = st.text_input("Company Name", key="company_name")
-            invoice_number = st.text_input("Invoice Number", key="invoice_number")
-            invoice_date = st.text_input("Invoice Date", key="invoice_date")
-            total_amount = st.text_input("Total Amount", key="total_amount")
-            line_items_summary = st.text_area("Line Items Summary", key="line_items_summary")
-
-            st.markdown("---")
-
-            # Send payload button
-            if st.button("🚀 Confirm & Send to Sheet"):
-                # 1. Read the raw bytes of the uploaded invoice file
-                file_bytes = uploaded_file.getvalue()
-
-                # 2. Package BOTH the file and the text fields together
-                payload_files = {
-                    'file': (uploaded_file.name, file_bytes, uploaded_file.type)
-                }
-                payload_data = {
-                    'company_name': company_name,
-                    'invoice_number': invoice_number,
-                    'invoice_date': invoice_date,
-                    'total_amount': total_amount,
-                    'line_items_summary': line_items_summary
-                }
+            # Check if upload was already successfully triggered to render the success block
+            if st.session_state.get("upload_success"):
+                st.markdown("""
+                <div style="background-color: #ffffff; border: 1px solid #E5E7EB; border-radius: 16px; padding: 2rem; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.015); margin-top: 1rem; margin-bottom: 1.5rem;">
+                  <div style="background-color: #ECFDF5; width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto; border: 1px solid #A7F3D0;">
+                    <span style="font-size: 2rem; color: #059669;">✓</span>
+                  </div>
+                  <h3 style="margin-top: 0; margin-bottom: 0.5rem; color: #0F172A; font-weight: 700; font-size: 1.3rem;">Upload Successfully</h3>
+                  <p style="color: #6B7280; font-size: 0.9rem; margin-bottom: 0;">The invoice data has been committed and sent to the spreadsheet database.</p>
+                </div>
+                """, unsafe_allow_html=True)
                 
-                # Check if Webhook URL is set
-                if MAKE_WEBHOOK_URL == "PASTE_YOUR_MAKE_WEBHOOK_URL_HERE" or not MAKE_WEBHOOK_URL.strip():
-                    st.warning("⚠️ Make Webhook URL is not configured. Simulating payload submission.")
-                    st.json(payload_data)
-                    st.success("✅ Upload Successfully")
-                else:
-                    with st.spinner("📤 Transmitting webhook payload..."):
-                        try:
-                            # 3. Post it all together to Make
-                            response = requests.post(MAKE_WEBHOOK_URL, data=payload_data, files=payload_files)
-                            if response.status_code in [200, 201, 202]:
-                                st.success("🎉 Upload Successfully")
-                            else:
-                                st.error(f"❌ Upload Unsuccessfully\nHTTP Status: {response.status_code}\nResponse: {response.text}")
-                        except Exception as e:
-                            st.error(f"❌ Upload Unsuccessfully\nError during transmission: {str(e)}")
+                # Option to edit or resend
+                if st.button("🔄 Edit & Resubmit"):
+                    del st.session_state.upload_success
+                    st.rerun()
+            else:
+                # We bind Streamlit text inputs directly to key="company_name", etc.
+                company_name = st.text_input("Company Name", key="company_name")
+                invoice_number = st.text_input("Invoice Number", key="invoice_number")
+                invoice_date = st.text_input("Invoice Date", key="invoice_date")
+                total_amount = st.text_input("Total Amount", key="total_amount")
+                line_items_summary = st.text_area("Line Items Summary", key="line_items_summary")
+
+                st.markdown("---")
+
+                # Send payload button
+                if st.button("🚀 Confirm & Send to Sheet"):
+                    # 1. Read the raw bytes of the uploaded invoice file
+                    file_bytes = uploaded_file.getvalue()
+
+                    # 2. Package BOTH the file and the text fields together
+                    payload_files = {
+                        'file': (uploaded_file.name, file_bytes, uploaded_file.type)
+                    }
+                    payload_data = {
+                        'company_name': company_name,
+                        'invoice_number': invoice_number,
+                        'invoice_date': invoice_date,
+                        'total_amount': total_amount,
+                        'line_items_summary': line_items_summary
+                    }
+                    
+                    # Check if Webhook URL is set
+                    if MAKE_WEBHOOK_URL == "PASTE_YOUR_MAKE_WEBHOOK_URL_HERE" or not MAKE_WEBHOOK_URL.strip():
+                        st.warning("⚠️ Make Webhook URL is not configured. Simulating payload submission.")
+                        st.json(payload_data)
+                        st.session_state.upload_success = True
+                        st.rerun()
+                    else:
+                        with st.spinner("📤 Transmitting webhook payload..."):
+                            try:
+                                # 3. Post it all together to Make
+                                response = requests.post(MAKE_WEBHOOK_URL, data=payload_data, files=payload_files)
+                                if response.status_code in [200, 201, 202]:
+                                    st.session_state.upload_success = True
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Upload Unsuccessfully\nHTTP Status: {response.status_code}\nResponse: {response.text}")
+                            except Exception as e:
+                                st.error(f"❌ Upload Unsuccessfully\nError during transmission: {str(e)}")
 
 else:
     st.info("ℹ️ Please upload an invoice file or take a photo to extract details.")
